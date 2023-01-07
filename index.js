@@ -8,8 +8,10 @@ const client = new Client({
 
 // Variáveis da lógica do bot
 const url = 'https://whatsapp-bot-e64db-default-rtdb.firebaseio.com/menu.json';
-const commands = ['teste1', 'Iniciar pedido', 'Continuar pedindo', 'Adicionar observação', 'Finalizar pedido', 'Sim', 'Não', 'Vou pagar no pix'];
+const commands = ['teste1', 'Iniciar pedido', 'Continuar pedindo', 'Adicionar observação',
+                  'Finalizar pedido', 'Sim', 'Não', 'Vou pagar no pix', 'Troco para quanto? (Por favor, informar somente o valor)', 'Confirmar pedido', 'Alterar pedido'];
 const payments = ['Pix/Dinheiro', 'Cartão', 'Ticket'];
+const pix = 'CPF: 000.000.000-00';
 var messageList = [];
 var pizzas = [];
 var drinks = [];
@@ -23,7 +25,6 @@ var delivery = 3;
 var total = null;
 var items = [];
 var payMethod = null;
-const pix = 'CPF: 000.000.000-00';
 var moneyChange = null;
 
 //Função para consumir a API Firebase
@@ -34,7 +35,6 @@ function getMenu() {
         console.log("PIZZAS: ", pizzas);
         console.log("BEBIDAS: ", drinks);
     });
-
 }
 
 // Função para gerar o QR Code de Login
@@ -46,6 +46,17 @@ client.on('qr', qr => {
 client.on('ready', () => {
     console.log('Bot pronto!');
 });
+
+//Função para limpar o carrinho
+function cleanCart(obs, adress, payment, moneyChange) {
+    messageList = [];
+    itemsTicket = [];
+    items = [];
+    obs = null;
+    adress = null;
+    payment = null;
+    moneyChange = null;
+}
 
 //Função para montar o ticket
 function createCart(itemList, obs, adress, payment, moneyChange) {
@@ -61,14 +72,8 @@ function createCart(itemList, obs, adress, payment, moneyChange) {
     }
     
     for (var i = 0; i < itemList.length; i++) {
-        items.push(itemList[i].name + ' - R$' + itemList[i].price);
+        items.push(itemList[i].name + ' - R$ ' + itemList[i].price);
         total += itemList[i].price;
-    }
-
-    if(payment == payments[0]) {
-        payment = payment + ' - ' + 
-        'Caso a forma de pagamento seja pix, mande o comprovante para podermos confirmar seu pedido.\n' +
-        'Chave pix: ' + pix;  
     }
     
     total = total + delivery;
@@ -77,25 +82,30 @@ function createCart(itemList, obs, adress, payment, moneyChange) {
              items.join('\n') + '\n\n' +
              '*Observações:* ' + obs + '\n' +
              '\n*Endereço de entrega:*\n' + adress + '\n\n' +
-             '*Forma de pagamento:* ' + payment + '\n' +
+             '*Forma de pagamento:*\n' + payment + '\n\n' +
              '*Taxa de entrega:* R$ ' + delivery + '\n\n' +
              '*Entrega entre 30~50 minutos*\n' +
              '\n*TOTAL:* R$ ' + total;
-    console.log(ticket)
-    return ticket; 
+
+    let button = new Buttons(
+        ticket,
+       [{ body: commands[9] }, { body: commands[10]}], '', '');
+
+    return button; 
 }
 
-// Função para iniciar o chat
+// Função para o chat
 function startChat() {
-
+    
     client.on('message', async message => {
         const chat = await message.getChat();
         const menu = await MessageMedia.fromFilePath('./Cardapio.png');
 
-        if (message.body == commands[0] && messageList.length == 0) {
+        if (message.body == commands[0]) {
+            cleanCart(obs, adress, payMethod, moneyChange);
             chatId = chat.id.user;
             let button = new Buttons('🤖 Olá, bem-vindo(a) ao nosso auto-atendimento! Clique para iniciar seu pedido.', [{ body: commands[1] }], '', '');
-            client.sendMessage(message.from, button);
+            chat.sendMessage(button);
         }
 
         if (message.body == commands[1] && chat.id.user == chatId) {
@@ -119,13 +129,12 @@ function startChat() {
                 if (item.id == message.body) {
                     myOrder = item
                     itemsTicket.push(myOrder);
-                    console.log("seu pedido: ", itemsTicket);
                     let button = new Buttons(
                         '*Item adicionado ao carrinho:*' + '\n'
                         + myOrder.name + '\n'
                         + 'Valor: R$ ' + myOrder.price,
                         [{ body: commands[2] }, { body: commands[3] }, { body: commands[4] }], '', '');
-                    client.sendMessage(message.from, button);
+                    chat.sendMessage(button);
                     
                 }
             });
@@ -134,25 +143,25 @@ function startChat() {
                 if (item.id == message.body) {
                     myOrder = item
                     itemsTicket.push(myOrder);
-                    console.log("seu pedido: ", itemsTicket);
                     let button = new Buttons(
                         '*Item adicionado ao carrinho:*' + '\n'
                         + myOrder.name + '\n'
                         + 'Valor: R$ ' + myOrder.price,
                         [{ body: commands[2] }, { body: commands[3] }, { body: commands[4] }], '', '');
-                    client.sendMessage(message.from, button);
+                    chat.sendMessage(button);
                 }
             })
             
         }
 
         if (message.body != commands && chat.id.user == chatId && messageList.slice(-1) == commands[3]) {
+            console.log('chegou aq')
             let button = new Buttons(
                 'Como gostaria de prosseguir?',
                 [{ body: commands[2] }, { body: commands[4] }], '', '');
 
             if (message.body != commands[3]) { obs = message.body; }
-            if (obs != null) { client.sendMessage(message.from, button); }
+            if (obs != null) { chat.sendMessage(button); }
         }
 
         if (message.body != commands && chat.id.user == chatId && messageList.slice(-1) == commands[4] && messageList.length >= 1) {
@@ -162,13 +171,13 @@ function startChat() {
 
             if (message.body != commands[4]) { adress = message.body; }
             if (adress != null) {
-                client.sendMessage(message.from, button);
+                chat.sendMessage(button);
             }
             
         }
 
         messageList.push(message.body);
-        console.log(messageList.length);
+        console.log("Mensagens recebidas: ", messageList);
 
         if (message.body != payments && chat.id.user == chatId && messageList.slice(-1) == payments[1] || messageList.slice(-1) == payments[2]){
             payMethod = message.body;
@@ -177,22 +186,32 @@ function startChat() {
 
         if (message.body != payments && chat.id.user == chatId && messageList.slice(-1) == payments[0]) {
             payMethod = message.body;
-            
+         
             let button = new Buttons(
                 'Precisa de troco?',
                 [{ body: commands[5] }, { body: commands[6]}, { body: commands[7]}], '', '');
 
-            client.sendMessage(message.from, button);
+            chat.sendMessage(button);
         }
 
         if (message.body != payments && chat.id.user == chatId && messageList.slice(-1) == commands[5]) {
             chat.sendMessage("Troco para quanto? (Por favor, informar somente o valor)");
         }
 
-        if (chat.id.user == chatId || messageList.length > 6) {
-            moneyChange = 'Dinheiro - Troco para ' + message.Body;
+        if (chat.id.user == chatId && messageList[messageList.length -2] == commands[5]) {
+            moneyChange = 'Dinheiro - Troco para ' + message.body;
+            
             chat.sendMessage(createCart(itemsTicket, obs, adress, payMethod, moneyChange));
-            console.log("Troco: " + message.body)
+        }
+
+        if (message.body == commands[6] && chat.id.user == chatId) {
+            moneyChange = 'Dinheiro - Não precisa de troco';
+            chat.sendMessage(createCart(itemsTicket, obs, adress, payMethod, moneyChange));
+        }
+        
+        if (message.body == commands[9] && chat.id.user == chatId) {
+            cleanCart(obs, adress, payMethod, moneyChange);
+            chat.sendMessage('Seu pedido foi enviado para análise! Informaremos sobre seu pedido em breve.');
         }
 
     })
